@@ -1,290 +1,193 @@
-import csv
-
 import arcade
 import random
 
-# =========================
-# Constants
-# =========================
-WIDTH_WINDOW = 800
-HEIGHT_WINDOW = 600
-TITLE_WINDOW = "Pacman"
+# Load Map From File
+with open("map.txt", "r") as f:
+    MAP_LEVEL = [line.strip() for line in f]
+
+ROWS = len(MAP_LEVEL)
+COLS = len(MAP_LEVEL[0])
+
 SIZE_TILE = 32
+WIDTH_WINDOW = COLS * SIZE_TILE
+HEIGHT_WINDOW = ROWS * SIZE_TILE
+TITLE_WINDOW = "Pacman"
 PLAYER_SPEED = 4
-
-# Wall color
-WALL_COLOR = arcade.color.BLUE
-
-
-with open("map.txt","r") as file:
-    reader = csv.reader(file)
-
+POWER_TIME = 3
 # =========================
-# Player Class
+# Player
 # =========================
 class Player(arcade.Sprite):
     def __init__(self, x, y):
         super().__init__()
-
-        # Create a yellow circle texture for the player
-        self.texture = arcade.make_circle_texture(
-            SIZE_TILE, arcade.color.YELLOW
-        )
+        self.texture = arcade.make_circle_texture(SIZE_TILE, arcade.color.YELLOW)
         self.center_x = x
         self.center_y = y
-
-        # Player movement speed
         self.change_x = 0
         self.change_y = 0
 
-
 # =========================
-# Ghost Class (Red circle)
+# Ghost
 # =========================
 class Ghost(arcade.Sprite):
     def __init__(self, x, y):
         super().__init__()
-
-        # Create a red circle texture for the ghost
-        self.texture = arcade.make_circle_texture(
-            SIZE_TILE, arcade.color.RED
-        )
+        self.texture = arcade.make_circle_texture(SIZE_TILE, arcade.color.RED)
         self.center_x = x
         self.center_y = y
-
-        # Ghost movement speed
         self.change_x = 0
         self.change_y = 0
-
-        # Timer to change direction
-        self.time_to_change = 0
-
+        self.timer = 0
 
 # =========================
-# Pacman Game View
+# Game
 # =========================
 class PacmanGame(arcade.View):
-
     def __init__(self):
         super().__init__()
 
-        # Sprite lists
-        self.list_wall = arcade.SpriteList()
-        self.list_coin = arcade.SpriteList()
-        self.list_ghost = arcade.SpriteList()
-        self.list_player = arcade.SpriteList()
+        self.walls = arcade.SpriteList()
+        self.coins = arcade.SpriteList()
+        self.powers = arcade.SpriteList()
+        self.ghosts = arcade.SpriteList()
+        self.player_list = arcade.SpriteList()
 
         self.player = None
         self.score = 0
         self.lives = 3
-        self.over_game = False
+        self.game_over = False
+        self.power_timer = 0
 
-        self.wall_color = WALL_COLOR
-        self.background_color = arcade.color.BLACK
-        self.x_start = 0
-        self.y_start = 0
+        arcade.set_background_color(arcade.color.BLACK)
 
-        # Set background color
-        arcade.set_background_color(self.background_color)
-
-    # =========================
-    # Setup the game
     # =========================
     def setup(self):
-        self.list_wall = arcade.SpriteList()
-        self.list_coin = arcade.SpriteList()
-        self.list_ghost = arcade.SpriteList()
-        self.list_player = arcade.SpriteList()
-
-        self.score = 0
-        self.lives = 3
-        self.over_game = False
-
         rows = len(MAP_LEVEL)
 
-        for row_idx, row in enumerate(MAP_LEVEL):
-            for col_idx, cell in enumerate(row):
-                x = col_idx * SIZE_TILE + SIZE_TILE / 2
-                y = (rows - row_idx - 1) * SIZE_TILE + SIZE_TILE / 2
+        for row_i, row in enumerate(MAP_LEVEL):
+            for col_i, cell in enumerate(row):
+                x = col_i * SIZE_TILE + SIZE_TILE / 2
+                y = (rows - row_i - 1) * SIZE_TILE + SIZE_TILE / 2
 
                 if cell == "#":
-                    # Create wall
                     wall = arcade.Sprite()
-                    wall.texture = arcade.make_soft_square_texture(
-                        SIZE_TILE, WALL_COLOR, outer_alpha=255
-                    )
+                    wall.texture = arcade.make_soft_square_texture(SIZE_TILE, arcade.color.BLUE, 255)
                     wall.center_x = x
                     wall.center_y = y
-                    self.list_wall.append(wall)
+                    self.walls.append(wall)
 
                 elif cell == ".":
-                    # Create coin
                     coin = arcade.Sprite()
-                    coin.texture = arcade.make_circle_texture(
-                        8, arcade.color.YELLOW
-                    )
+                    coin.texture = arcade.make_circle_texture(8, arcade.color.YELLOW)
                     coin.center_x = x
                     coin.center_y = y
-                    self.list_coin.append(coin)
+                    self.coins.append(coin)
+
+                elif cell == "O":
+                    power = arcade.Sprite()
+                    power.texture = arcade.make_circle_texture(12, arcade.color.GREEN)
+                    power.center_x = x
+                    power.center_y = y
+                    self.powers.append(power)
 
                 elif cell == "P":
-                    # Create player
                     self.player = Player(x, y)
-                    self.list_player.append(self.player)
-
-                    # Save start position
-                    self.x_start = x
-                    self.y_start = y
+                    self.player_list.append(self.player)
+                    self.start_x = x
+                    self.start_y = y
 
                 elif cell == "G":
-                    # Create ghost
                     ghost = Ghost(x, y)
-                    self.list_ghost.append(ghost)
+                    self.ghosts.append(ghost)
 
-    # =========================
-    # Draw everything
     # =========================
     def on_draw(self):
         self.clear()
+        self.walls.draw()
+        self.coins.draw()
+        self.powers.draw()
+        self.ghosts.draw()
+        self.player_list.draw()
 
-        self.list_wall.draw()
-        self.list_coin.draw()
-        self.list_ghost.draw()
-        self.list_player.draw()
+        arcade.draw_text(f"Score: {self.score}", 10, HEIGHT_WINDOW-30, arcade.color.WHITE, 14)
+        arcade.draw_text(f"Lives: {self.lives}", 10, HEIGHT_WINDOW-50, arcade.color.WHITE, 14)
 
-        # Draw score
-        arcade.draw_text(
-            f"Score: {self.score}",
-            10,
-            HEIGHT_WINDOW - 30,
-            arcade.color.WHITE,
-            14
-        )
-
-        # Draw lives
-        arcade.draw_text(
-            f"Lives: {self.lives}",
-            10,
-            HEIGHT_WINDOW - 55,
-            arcade.color.WHITE,
-            14
-        )
-
-        # Draw game over or win message
-        if self.over_game:
-            if self.lives <= 0:
-                arcade.draw_text(
-                    "GAME OVER",
-                    WIDTH_WINDOW / 2,
-                    HEIGHT_WINDOW / 2,
-                    arcade.color.RED,
-                    40,
-                    anchor_x="center"
-                )
-            else:
-                arcade.draw_text(
-                    "YOU WIN",
-                    WIDTH_WINDOW / 2,
-                    HEIGHT_WINDOW / 2,
-                    arcade.color.RED,
-                    40,
-                    anchor_x="center"
-                )
+        if self.game_over:
+            arcade.draw_text("GAME OVER", WIDTH_WINDOW/2, HEIGHT_WINDOW/2,
+                             arcade.color.RED, 40, anchor_x="center")
 
     # =========================
-    # Game update logic
-    # =========================
-    def on_update(self, delta_time):
-        if self.over_game:
+    def on_update(self, dt):
+        if self.game_over:
             return
 
-        # Update player movement
         self.player.update()
 
-        # Player collision with walls
-        if arcade.check_for_collision_with_list(self.player, self.list_wall):
+        # Wall collision
+        if arcade.check_for_collision_with_list(self.player, self.walls):
             self.player.center_x -= self.player.change_x
             self.player.center_y -= self.player.change_y
 
-        # Player collision with coins
-        coins_hit = arcade.check_for_collision_with_list(
-            self.player, self.list_coin
-        )
-        for coin in coins_hit:
-            coin.remove_from_sprite_lists()
+        # Coins
+        for c in arcade.check_for_collision_with_list(self.player, self.coins):
+            c.remove_from_sprite_lists()
             self.score += 10
 
-        # ======= Ghost movement =======
-        for ghost in self.list_ghost:
-            ghost.update()
+        # Power coin
+        for p in arcade.check_for_collision_with_list(self.player, self.powers):
+            p.remove_from_sprite_lists()
+            self.power_timer = POWER_TIME
 
-            # Change direction every 0.5 seconds
-            ghost.time_to_change += delta_time
-            if ghost.time_to_change >= 0.5:
-                ghost.time_to_change = 0
-                direction = random.choice(["up", "down", "left", "right"])
-                if direction == "up":
-                    ghost.change_x = 0
-                    ghost.change_y = PLAYER_SPEED
-                elif direction == "down":
-                    ghost.change_x = 0
-                    ghost.change_y = -PLAYER_SPEED
-                elif direction == "left":
-                    ghost.change_x = -PLAYER_SPEED
-                    ghost.change_y = 0
-                elif direction == "right":
-                    ghost.change_x = PLAYER_SPEED
-                    ghost.change_y = 0
+        if self.power_timer > 0:
+            self.power_timer -= dt
 
-            # Ghost collision with walls
-            if arcade.check_for_collision_with_list(ghost, self.list_wall):
-                ghost.center_x -= ghost.change_x
-                ghost.center_y -= ghost.change_y
-                ghost.change_x = 0
-                ghost.change_y = 0
+        # Ghosts
+        for g in self.ghosts:
+            if self.power_timer <= 0:
+                g.update()
+                g.timer += dt
+                if g.timer > 0.5:
+                    g.timer = 0
+                    g.change_x, g.change_y = random.choice([
+                        (PLAYER_SPEED,0), (-PLAYER_SPEED,0),
+                        (0,PLAYER_SPEED), (0,-PLAYER_SPEED)
+                    ])
 
-        # ======= Player collision with ghost =======
-        if arcade.check_for_collision_with_list(self.player, self.list_ghost):
-            self.lives -= 1
+            if arcade.check_for_collision_with_list(g, self.walls):
+                g.center_x -= g.change_x
+                g.center_y -= g.change_y
+                g.change_x = g.change_y = 0
 
-            # Return player to start position
-            self.player.center_x = self.x_start
-            self.player.center_y = self.y_start
+        # Player hit ghost
+        if arcade.check_for_collision_with_list(self.player, self.ghosts):
+            if self.power_timer <= 0:
+                self.lives -= 1
+                self.player.center_x = self.start_x
+                self.player.center_y = self.start_y
+                if self.lives <= 0:
+                    self.game_over = True
 
-            # Stop player movement
-            self.player.change_x = 0
-            self.player.change_y = 0
+        # Win
+        if len(self.coins) == 0:
+            self.game_over = True
 
-            # Game over if no lives left
-            if self.lives <= 0:
-                self.over_game = True
-
-        # Win if all coins are collected
-        if len(self.list_coin) == 0:
-            self.over_game = True
-
-    # =========================
-    # Keyboard input
     # =========================
     def on_key_press(self, key, modifiers):
         if key == arcade.key.UP:
             self.player.change_y = PLAYER_SPEED
-        elif key == arcade.key.DOWN:
+        if key == arcade.key.DOWN:
             self.player.change_y = -PLAYER_SPEED
-        elif key == arcade.key.LEFT:
+        if key == arcade.key.LEFT:
             self.player.change_x = -PLAYER_SPEED
-        elif key == arcade.key.RIGHT:
+        if key == arcade.key.RIGHT:
             self.player.change_x = PLAYER_SPEED
 
     def on_key_release(self, key, modifiers):
         if key in (arcade.key.LEFT, arcade.key.RIGHT):
             self.player.change_x = 0
-        elif key in (arcade.key.UP, arcade.key.DOWN):
+        if key in (arcade.key.UP, arcade.key.DOWN):
             self.player.change_y = 0
 
-
-# =========================
-# Main function
 # =========================
 def main():
     window = arcade.Window(WIDTH_WINDOW, HEIGHT_WINDOW, TITLE_WINDOW)
@@ -292,7 +195,6 @@ def main():
     window.show_view(game)
     game.setup()
     arcade.run()
-
 
 if __name__ == "__main__":
     main()
